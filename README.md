@@ -119,6 +119,55 @@ sudo ./docker/remote/ssl/ssl-setup.sh create example.com
 ./docker/remote/deployment/rollback.sh
 ```
 
+## 🔐 Server-Sicherheit & Berechtigungen
+
+### 👥 Benutzer-Hierarchie
+
+**root-Benutzer:**
+- Server-Provisioning (`server-setup.sh`)
+- SSL-Zertifikat-Management (`ssl-setup.sh`)
+- System-Updates und Firewall-Konfiguration
+- Nginx-Konfiguration und Service-Management
+
+**docker-user:**
+- Application-Deployment (`deploy.sh`, `rollback.sh`)
+- Docker-Container-Management
+- Code-Updates und Migrationen
+- Application-Logs und Monitoring
+
+### 🛡️ Sicherheitsfeatures
+
+**SSH-Härtung:**
+- Key-only Authentication (Passwort-Login deaktiviert)
+- Root-Login deaktiviert
+- Dedicated deployment user (`docker-user`)
+- Custom SSH-Port (optional)
+
+**Firewall-Konfiguration:**
+- UFW (Uncomplicated Firewall) aktiviert
+- Nur HTTP (80), HTTPS (443) und SSH (22) geöffnet
+- Alle anderen Ports geblockt
+
+**SSL/TLS:**
+- Automatische Let's Encrypt Zertifikate
+- HTTPS-Weiterleitung
+- Security Headers (HSTS, CSP, X-Frame-Options)
+- Automatische Zertifikat-Erneuerung
+
+### 🔄 Backup-Strategie
+
+**Automatische Backups:**
+- Vor jedem Deployment
+- Datenbank (MySQL Volume)
+- Storage-Dateien (Uploads, Caches)
+- Anwendungscode
+- Retention: 30 Tage
+
+**Backup-Standorte:**
+- Lokaler Server: `/var/backups/laravel/`
+- Timestamps: `backup_YYYYMMDD_HHMMSS`
+- Komprimierte Archive (tar.gz)
+
 ## 🛠️ Verfügbare Skripte
 
 ### Lokale Entwicklung (`./docker/local/scripts/dev.sh`)
@@ -184,14 +233,114 @@ sudo ./docker/remote/ssl/ssl-setup.sh create example.com
 
 ## 🔄 Deployment Workflow
 
-1. **Backup**: Automatisches Backup vor jedem Deployment
-2. **Code Update**: Git Repository aktualisieren
-3. **Dependencies**: Composer Dependencies installieren
-4. **Build**: Docker Images bauen
-5. **Database**: Migrationen ausführen
-6. **SSL**: SSL-Zertifikat prüfen/erstellen
-7. **Health Check**: Service-Gesundheit prüfen
-8. **Cleanup**: Alte Images und Backups aufräumen
+### 🖥️ Server-Vorbereitung (Einmalig)
+
+**1. Server-Provisioning als root:**
+```bash
+# SSH-Zugang als root
+ssh root@your-server.com
+
+# Server-Setup-Script ausführen
+sudo ./docker/remote/provision/server-setup.sh
+```
+
+**Was passiert beim Server-Setup:**
+- Docker & Docker Compose Installation
+- Firewall-Konfiguration (UFW)
+- SSH-Härtung (Key-only Authentication)
+- Dedicated `docker-user` erstellen
+- Nginx-Installation für SSL-Terminierung
+- Certbot (Let's Encrypt) Installation
+- Verzeichnisstruktur erstellen
+- Sicherheits-Updates
+
+**2. SSL-Zertifikat erstellen:**
+```bash
+# SSL-Zertifikat für Domain erstellen
+sudo ./docker/remote/ssl/ssl-setup.sh create your-domain.com
+```
+
+### 🚀 Production Deployment (Regelmäßig)
+
+**Als docker-user ausführen:**
+```bash
+# SSH-Zugang als docker-user
+ssh docker-user@your-server.com
+
+# Code auf Server übertragen (Git oder Upload)
+# Deployment ausführen
+./docker/remote/deployment/deploy.sh
+```
+
+### 📋 Detaillierter Deployment-Ablauf
+
+**1. Pre-Deployment Checks (`deploy.sh:62-88`)**
+- Docker & Docker Compose Version prüfen
+- Berechtigungen validieren (muss als `docker-user` laufen)
+- Log- und Backup-Verzeichnisse erstellen
+
+**2. Konfiguration laden (`deploy.sh:90-114`)**
+- `deploy-config.yml` lesen (Projektname, Domain, Versionen)
+- `.env` validieren (Passwörter, Ports, Umgebungsvariablen)
+- Projekt-Informationen extrahieren
+
+**3. Vollständiges Backup (`deploy.sh:116-162`)**
+- Aktuelle Services stoppen
+- MySQL-Datenbank Backup (Volume → tar.gz)
+- Storage-Dateien Backup (Uploads, Caches)
+- Aktueller Code Backup
+- Backup mit Timestamp in `/var/backups/laravel/`
+
+**4. Code-Deployment (`deploy.sh:164-191`)**
+- Git Repository klonen/aktualisieren
+- Composer Dependencies installieren (production)
+- Code-Optimierungen anwenden
+
+**5. Docker-Konfiguration (`deploy.sh:193-228`)**
+- Production Docker Compose aus Template generieren
+- Laravel-Caches erstellen (config, routes, views)
+- Optimierte Konfiguration für Production
+
+**6. Services starten (`deploy.sh:230-267`)**
+- Docker Images bauen (no-cache für frische Builds)
+- Services hochfahren (MySQL, Redis, Nginx, PHP-FPM)
+- Health-Checks mit Retry-Logik (30 Versuche)
+
+**7. Datenbank-Migration (`deploy.sh:269-284`)**
+- Auf MySQL-Verfügbarkeit warten
+- Laravel-Migrationen ausführen (`migrate --force`)
+
+**8. SSL-Setup (`deploy.sh:286-328`)**
+- SSL-Zertifikat prüfen/erstellen mit Let's Encrypt
+- Zertifikat in Docker Volumes kopieren
+- Nginx SSL-Konfiguration generieren
+
+**9. Cleanup (`deploy.sh:330-343`)**
+- Alte Docker Images entfernen
+- Backup-Retention (30 Tage)
+- System-Cleanup
+
+**10. Verifikation (`deploy.sh:345-375`)**
+- HTTP Health Check auf `/health`
+- HTTPS Health Check (falls SSL aktiv)
+- Service-Status validieren
+
+### 🔄 Rollback-Workflow
+
+**Bei Problemen Rollback ausführen:**
+```bash
+./docker/remote/deployment/rollback.sh
+```
+
+**Rollback-Prozess:**
+1. Verfügbare Backups auflisten
+2. Backup-Auswahl durch Administrator
+3. Services stoppen
+4. Datenbank aus Backup wiederherstellen
+5. Storage-Dateien wiederherstellen
+6. Code-Version zurücksetzen
+7. Services neustarten
+8. Gesundheitsprüfung
 
 ## 🐳 Docker Compose Features
 
@@ -235,7 +384,9 @@ sudo ./docker/remote/ssl/ssl-setup.sh list
 
 ## 🚨 Troubleshooting
 
-### Container starten nicht
+### 🔧 Entwicklungsumgebung
+
+**Container starten nicht:**
 ```bash
 # Logs prüfen
 ./docker/local/scripts/dev.sh logs
@@ -247,19 +398,124 @@ sudo ./docker/remote/ssl/ssl-setup.sh list
 ./docker/local/scripts/dev.sh rebuild
 ```
 
-### SSL-Probleme
+**Ports bereits belegt:**
+```bash
+# Ports in .env anpassen
+HTTP_PORT=8200
+MYSQL_PORT=8206
+REDIS_PORT=8279
+
+# Compose-Dateien neu generieren
+./docker/local/scripts/generate-compose.sh
+```
+
+### 🖥️ Server-Probleme
+
+**Deployment schlägt fehl:**
+```bash
+# Deployment-Logs prüfen
+tail -f /var/log/laravel-deploy/deploy.log
+
+# Container-Status prüfen
+docker-compose -f docker-compose.prod.yml ps
+
+# Service-Logs anzeigen
+docker-compose -f docker-compose.prod.yml logs -f [service]
+```
+
+**SSL-Probleme:**
 ```bash
 # SSL-Status prüfen
 sudo ./docker/remote/ssl/ssl-setup.sh status example.com
 
 # Zertifikat erneuern
 sudo ./docker/remote/ssl/ssl-setup.sh renew example.com
+
+# Alle Zertifikate anzeigen
+sudo ./docker/remote/ssl/ssl-setup.sh list
 ```
 
-### Rollback durchführen
+**Rollback durchführen:**
 ```bash
 # Verfügbare Backups anzeigen und auswählen
 ./docker/remote/deployment/rollback.sh
+
+# Spezifisches Backup wiederherstellen
+./docker/remote/deployment/rollback.sh backup_20231215_143022
+```
+
+**Berechtigungsprobleme:**
+```bash
+# Als docker-user einloggen
+sudo su - docker-user
+
+# Docker-Berechtigung prüfen
+docker ps
+
+# Verzeichnis-Berechtigungen korrigieren
+sudo chown -R docker-user:docker-user /var/www/laravel/
+```
+
+### 🔍 Monitoring & Debugging
+
+**Service-Gesundheit prüfen:**
+```bash
+# HTTP Health Check
+curl -f http://your-domain.com/health
+
+# HTTPS Health Check
+curl -f https://your-domain.com/health
+
+# MySQL-Verbindung testen
+docker-compose -f docker-compose.prod.yml exec mysql mysql -u root -p
+
+# Redis-Verbindung testen
+docker-compose -f docker-compose.prod.yml exec redis redis-cli ping
+```
+
+**Performance-Monitoring:**
+```bash
+# Container-Ressourcen anzeigen
+docker stats
+
+# Laravel-Logs anzeigen
+docker-compose -f docker-compose.prod.yml exec app tail -f storage/logs/laravel.log
+
+# Nginx-Logs anzeigen
+docker-compose -f docker-compose.prod.yml exec nginx tail -f /var/log/nginx/access.log
+```
+
+### 🔄 Häufige Probleme & Lösungen
+
+**Problem: "Permission denied" beim Deployment**
+```bash
+# Lösung: Berechtigungen korrigieren
+sudo chown -R docker-user:docker-user /var/www/laravel/
+sudo chmod +x docker/remote/deployment/deploy.sh
+```
+
+**Problem: SSL-Zertifikat nicht erreichbar**
+```bash
+# Lösung: Firewall-Regeln prüfen
+sudo ufw status
+sudo ufw allow 'Nginx Full'
+```
+
+**Problem: Datenbank-Migration schlägt fehl**
+```bash
+# Lösung: MySQL-Container neustarten
+docker-compose -f docker-compose.prod.yml restart mysql
+
+# Manuell migrieren
+docker-compose -f docker-compose.prod.yml exec app php artisan migrate --force
+```
+
+**Problem: Services starten nicht nach Deployment**
+```bash
+# Lösung: Schritt-für-Schritt-Debugging
+docker-compose -f docker-compose.prod.yml config  # Konfiguration prüfen
+docker-compose -f docker-compose.prod.yml up -d   # Services starten
+docker-compose -f docker-compose.prod.yml logs -f # Logs verfolgen
 ```
 
 ## 📋 Entwicklungsdokumentation
