@@ -1,0 +1,49 @@
+[mysqld]
+# MySQL Development Configuration
+# Optimiert für Development-Performance
+
+# General Settings
+default-storage-engine = InnoDB
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+
+# Performance Settings (Development)
+innodb_buffer_pool_size = 256M
+innodb_log_file_size = 64M
+innodb_flush_log_at_trx_commit = 2
+innodb_flush_method = O_DIRECT
+
+# Query Cache (Development)
+query_cache_type = 1
+query_cache_size = 32M
+query_cache_limit = 2M
+
+# Connection Settings
+max_connections = 50
+connect_timeout = 60
+wait_timeout = 600
+interactive_timeout = 600
+
+# Logging (Development)
+general_log = 1
+general_log_file = /var/log/mysql/general.log
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 2
+
+# Binary Logging (Development)
+log_bin = /var/log/mysql/mysql-bin.log
+binlog_expire_logs_seconds = 86400
+max_binlog_size = 100M
+
+# Error Logging
+log_error = /var/log/mysql/error.log
+
+# SQL Mode
+sql_mode = STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO
+
+[client]
+default-character-set = utf8mb4
+
+[mysql]
+default-character-set = utf8mb4

@@ -1,0 +1,136 @@
+# Laravel Docker Deployment Configuration
+# Statische Projektdaten - sicher in Git einzuchecken
+# Sensitive Daten gehören in .env (NICHT in Git!)
+
+project:
+  name: "laravel-deploy-v2"
+  description: "Laravel Docker Production Setup"
+  domain: "example.com"
+  ssl_email: "admin@example.com"
+  
+  # Eindeutige Container-Namen für Multi-Projekt-Support
+  container_prefix: "laravel-deploy-v2"
+
+# Service-Versionen (statisch, keine Secrets)
+versions:
+  php: "8.3"
+  mysql: "8.0"
+  redis: "7"
+  node: "20"
+  nginx: "1.24"
+
+# Build-Konfiguration
+build:
+  # Composer Optimierungen
+  composer_optimize: true
+  composer_no_dev: true
+  
+  # Asset Building
+  npm_build: true
+  npm_build_command: "npm run build"
+  
+  # OPcache Settings
+  opcache_enabled: true
+  opcache_preload: true
+  
+  # Multi-stage Build
+  use_multi_stage: true
+
+# Features (statisch, keine Secrets)
+features:
+  # SSL/HTTPS
+  ssl_enabled: true
+  ssl_auto_redirect: true
+  
+  # Caching
+  redis_cache: true
+  redis_sessions: true
+  redis_queues: true
+  
+  # Laravel Services
+  scheduler_enabled: true
+  queue_workers: 2
+  horizon_enabled: false
+  
+  # Monitoring
+  health_checks: true
+  log_aggregation: true
+  
+  # Security
+  security_headers: true
+  rate_limiting: true
+
+# Nginx Konfiguration
+nginx:
+  worker_processes: "auto"
+  worker_connections: 1024
+  client_max_body_size: "100M"
+  
+  # Gzip Compression
+  gzip_enabled: true
+  gzip_level: 6
+  
+  # SSL Settings
+  ssl_protocols: "TLSv1.2 TLSv1.3"
+  ssl_session_timeout: "1d"
+
+# PHP Konfiguration
+php:
+  memory_limit: "512M"
+  max_execution_time: 300
+  upload_max_filesize: "100M"
+  post_max_size: "100M"
+  
+  # OPcache
+  opcache:
+    memory_consumption: 512
+    max_accelerated_files: 20000
+    jit_enabled: true
+    jit_buffer_size: "256M"
+
+# Database Konfiguration (keine Credentials!)
+database:
+  # MySQL Settings
+  mysql:
+    version: "8.0"
+    charset: "utf8mb4"
+    collation: "utf8mb4_unicode_ci"
+    
+  # Redis Settings
+  redis:
+    version: "7"
+    maxmemory_policy: "allkeys-lru"
+    save_enabled: true
+
+# Backup Konfiguration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # 2 AM daily
+  retention_days: 30
+  
+  # Backup Targets
+  mysql_backup: true
+  storage_backup: true
+  
+# Logging
+logging:
+  level: "info"
+  max_files: 10
+  max_size: "10M"
+  
+  # Log Rotation
+  rotate_daily: true
+  compress_logs: true
+
+# Development Overrides
+development:
+  # Development-specific settings
+  debug_enabled: true
+  xdebug_enabled: true
+  
+  # Volumes for live reload
+  source_volume: true
+  node_modules_volume: true
+  
+  # Different resource limits
+  memory_limit: "256M"

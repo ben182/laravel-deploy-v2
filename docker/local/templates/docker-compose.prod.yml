@@ -1,0 +1,131 @@
+# Laravel Docker Compose - Production Environment
+# Generiert aus Templates - NICHT MANUELL BEARBEITEN!
+
+version: '3.8'
+
+services:
+  # Laravel Application (Production)
+  app:
+    build:
+      context: .
+      dockerfile: docker/shared/dockerfile/Dockerfile
+      target: production
+    container_name: ${PROJECT_NAME:-laravel}_app_prod
+    restart: unless-stopped
+    working_dir: /var/www/html
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - OPCACHE_ENABLE=1
+      - OPCACHE_VALIDATE_TIMESTAMPS=0
+    volumes:
+      - storage_data:/var/www/html/storage
+      - ssl_certs:/etc/ssl/certs:ro
+      - ssl_private:/etc/ssl/private:ro
+      - app_logs:/var/log
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - laravel_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # MySQL Database (Production)
+  mysql:
+    image: mysql:8.0
+    container_name: ${PROJECT_NAME:-laravel}_mysql_prod
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - mysql_logs:/var/log/mysql
+      - ./docker/remote/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+    networks:
+      - laravel_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Redis Cache/Session/Queue (Production)
+  redis:
+    image: redis:7-alpine
+    container_name: ${PROJECT_NAME:-laravel}_redis_prod
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+      - redis_logs:/var/log/redis
+    networks:
+      - laravel_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Database Backup Service
+  backup:
+    image: alpine:latest
+    container_name: ${PROJECT_NAME:-laravel}_backup_prod
+    restart: unless-stopped
+    volumes:
+      - mysql_data:/mysql-data:ro
+      - storage_data:/app-storage:ro
+      - backup_data:/backups
+      - ./docker/remote/backup/backup.sh:/backup.sh:ro
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_DATABASE=${DB_DATABASE}
+      - MYSQL_USER=${DB_USERNAME}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+      - BACKUP_RETENTION_DAYS=30
+    depends_on:
+      - mysql
+    networks:
+      - laravel_network
+    command: |
+      sh -c "
+        apk add --no-cache mysql-client tar gzip &&
+        crond -f -d 8
+      "
+
+networks:
+  laravel_network:
+    driver: bridge
+    name: ${PROJECT_NAME:-laravel}_network_prod
+
+volumes:
+  mysql_data:
+    name: ${PROJECT_NAME:-laravel}_mysql_data_prod
+  redis_data:
+    name: ${PROJECT_NAME:-laravel}_redis_data_prod
+  storage_data:
+    name: ${PROJECT_NAME:-laravel}_storage_data_prod
+  backup_data:
+    name: ${PROJECT_NAME:-laravel}_backup_data_prod
+  ssl_certs:
+    name: ${PROJECT_NAME:-laravel}_ssl_certs_prod
+  ssl_private:
+    name: ${PROJECT_NAME:-laravel}_ssl_private_prod
+  app_logs:
+    name: ${PROJECT_NAME:-laravel}_app_logs_prod
+  mysql_logs:
+    name: ${PROJECT_NAME:-laravel}_mysql_logs_prod
+  redis_logs:
+    name: ${PROJECT_NAME:-laravel}_redis_logs_prod
